@@ -21,29 +21,47 @@ ArrayList<String> announcements = new ArrayList<String>();
 String annHead = "";
 String ann;
 int time;
-int timerAmount = 5000;
-int timer = timerAmount; // Announcement timer in seconds
+int timer; // Announcement timer in seconds
 ArrayList<String>[] announcementGrid;
 int annI;
 int annJ;
 PFont fontReg;
 PFont fontBold;
+float movieWidth, movieHeight;
+
+JSONObject json;
+float announcementScale;
+int timerAmount;
+String videoFile;
+String websiteURL;
+String fontString;
+String fontBoldString;
 
 // ******************** Initialize ******************** //
 void setup() {
+  // Load JSON settings
+  json = loadJSONObject("data/settings.json");
+  announcementScale = json.getFloat("announcement scale");
+  timerAmount = json.getInt("seconds between announcements")*1000;
+  videoFile = json.getString("video file");
+  websiteURL = json.getString("website link");
+  fontString = json.getString("font");
+  fontBoldString = json.getString("font bold");
+  timer = timerAmount;
+  
   // Canvas
   fullScreen();
   //size(960, 720);
 
   // Movie object
-  movie = new Movie(this, "video.avi");
+  movie = new Movie(this, videoFile);
   movie.loop();
 
-  // Announcements
+  // Get announcements
   getAnnouncements();
 
 
-  // Draw announcements
+  // Format announcements
   int annHeadings = 1;
   for (String s : announcements) {
     // Get header
@@ -52,7 +70,7 @@ void setup() {
       annHeadings += 1;
     }
 
-    // Print
+    // Print and log
     if (!s.equals(annHead)) {
       println(annHead+" "+s);
     }
@@ -78,12 +96,8 @@ void setup() {
   annJ = 1;
   
   // Fonts
-  String[] fontList = PFont.list();
-  for (String f : fontList) {
-    println(f);
-  }
-  fontReg = createFont("Arial", 1);
-  fontBold = createFont("Arial Bold", 1);
+  fontReg = createFont(fontString, 1);
+  fontBold = createFont(fontBoldString, 1);
 }
 
 // ******************** Loop ******************** //
@@ -94,16 +108,16 @@ void draw() {
   // Title
   textFont(fontBold);
   textAlign(CENTER, TOP);
-  textSize(26);
+  textSize(width/45);
   text("Three Oaks Senior High", width/6+10, 30);
   
   // Info column
   textFont(fontBold);
-  textSize(40);
-  text(announcementGrid[0].get(1), width/6+10, 60);
+  textSize(width/40);
+  text(announcementGrid[0].get(1), width/6+10, 80);
   textFont(fontReg);
-  textSize(18);
-  text(announcementGrid[0].get(0), width/6+10, 110);
+  textSize(width/60);
+  text(announcementGrid[0].get(0), width/6+10, 130);
   drawTime();
   
   // Video
@@ -117,9 +131,16 @@ void draw() {
   textFont(fontBold);
   textSize(16);
   text("This is a beta. Please give feedback here: https://bit.ly/385xvt8", width/2, height-20);
+  
+  // Hide cursor when idle
+  noCursor();
 }
 
 // ******************** Methods ******************** //
+void mouseMoved() {
+  cursor();
+}
+
 // Read frames from movie
 void movieEvent(Movie movie) {
   movie.read();
@@ -130,27 +151,36 @@ void drawMovie() {
   int padding = 30;
   int x = width/3;
   int y = 20;
-  int w = 2*width/3;
-  int h = movie.height/(movie.width/w);
-  image(movie, x+padding, y+padding, w-padding*2, h-padding*2);
+  movieWidth = 2*width/3;
+  movieHeight = movie.height/(movie.width/movieWidth);
+  image(movie, x+padding, y+padding, movieWidth-padding*2, movieHeight-padding*2);
 }
 
 // Draw announcements
 void drawAnnouncements() {
-  textAlign(LEFT);
-  textFont(fontBold);
-  textSize(40);
-  text(announcementGrid[annI].get(0).replace(':',' ')+"ANNOUNCEMENTS:", 200, movie.height+40, width-400, 100);
-  textFont(fontReg);
-  textSize(30);
-  text(announcementGrid[annI].get(annJ), 200, movie.height+90, width-400, 200);
+  try {
+    textAlign(LEFT);
+    textFont(fontBold);
+    textSize((width/35)*announcementScale);
+    text(announcementGrid[annI].get(0).replace(':',' ')+"ANNOUNCEMENTS:", 200, movieHeight+40, width-400, 100);
+    textFont(fontReg);
+    textSize((width/40)*announcementScale);
+    text(announcementGrid[annI].get(annJ), 200, movieHeight+90, width-400, 200);
+  } catch (Exception e) {
+    cycleActiveAnnouncement();
+  }
 
   // Update time
   time = millis();
   if (time > timer) {
     timer += timerAmount;
     // Cycle announcement
-    if (annJ < announcementGrid[annI].size()-1) {
+    cycleActiveAnnouncement();
+  }
+}
+
+void cycleActiveAnnouncement() {
+  if (annJ < announcementGrid[annI].size()-1) {
       annJ++;
     } else {
       if (annI < announcementGrid.length-1) {
@@ -160,15 +190,13 @@ void drawAnnouncements() {
       }
       annJ = 1;
     }
-  }
 }
-
 
 // Create ArrayList of announcements
 void getAnnouncements() {
   // Load announcements page html
   String[] lines;
-  lines = loadStrings("https://threeoakshighschool.wordpress.com/daily-announcements/");
+  lines = loadStrings(websiteURL);
 
   // Convert string array into one String
   String html = join(lines, '\n');
@@ -191,11 +219,29 @@ void getAnnouncements() {
 }
 
 void drawTime() {
-  textFont(fontReg);
-  textSize(42);
+  textFont(fontBold);
+  textSize(width/30);
   int s = second();  // Values from 0 - 59
   int m = minute();  // Values from 0 - 59
   int h = hour();    // Values from 0 - 23
   h = h % 12;
-  text(h+":"+nf(m, 2, 0)+":"+nf(s, 2, 0), width/6+10, 150);
+  h = (h == 0) ? 12 : h;
+  text(h+":"+nf(m, 2, 0)+":"+nf(s, 2, 0), width/6+10, 200);
+}
+
+// Input
+void keyPressed() {
+  switch (key) {
+    case 'r':
+      getAnnouncements();
+      break;
+    case 'x':
+      exit();
+      break;
+  }
+  switch (keyCode) {
+    case ESC:
+      exit();
+      break;
+  }
 }
